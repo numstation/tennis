@@ -11,6 +11,13 @@ import requests
 import pandas as pd
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
+import pytz
+
+# Hong Kong timezone for "Last updated" display
+HK_TZ = pytz.timezone("Asia/Hong_Kong")
+
+# Static playing hours for sniper time selection (not driven by current data)
+SNIPER_TIME_OPTIONS = [f"{h:02d}:00" for h in range(7, 24)]
 
 st.set_page_config(page_title="HK Tennis Sniper", layout="wide")
 
@@ -100,7 +107,7 @@ def fetch_data():
 
 
 st.title("🎾 Ultimate HK Tennis Court Sniper")
-st.caption(f"Last updated: **{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}**")
+st.caption(f"Last updated: **{datetime.now(HK_TZ).strftime('%Y-%m-%d %H:%M:%S')}** (Hong Kong Time)")
 
 # --- Refresh Data ---
 if st.button("🔄 Refresh Data"):
@@ -124,18 +131,14 @@ df = pd.DataFrame(raw_records)
 # CRITICAL: Available_Courts is STRING from API → convert to int
 df["Available_Courts"] = pd.to_numeric(df["Available_Courts"], errors="coerce").fillna(0).astype(int)
 
-# Filter out rows where Available_Courts <= 0
+# Rows with at least one court available (for alert logic and table)
 available_df = df[df["Available_Courts"] > 0].copy()
 
-if available_df.empty:
-    st.info("No courts with availability at the moment. Try again later.")
-    st.stop()
-
-# ========== 🎯 Sniper Settings (Cascading Filters) ==========
+# ========== 🎯 Sniper Settings (populated from RAW df so fully-booked venues appear) ==========
 st.sidebar.header("🎯 Sniper Settings")
 
-# Step 1: District (one or multiple)
-all_districts = sorted(available_df["District_Name_EN"].dropna().unique())
+# Step 1: District — from raw df (all districts, including fully booked)
+all_districts = sorted(df["District_Name_EN"].dropna().unique())
 selected_districts = st.sidebar.multiselect(
     "Step 1: District",
     options=all_districts,
@@ -143,11 +146,11 @@ selected_districts = st.sidebar.multiselect(
     key="snipe_district",
 )
 
-# Step 2: Venue — only from selected district(s)
+# Step 2: Venue — from raw df, only in selected district(s) (so user can target a booked venue)
 if selected_districts:
-    scope_df = available_df[available_df["District_Name_EN"].isin(selected_districts)]
+    scope_df = df[df["District_Name_EN"].isin(selected_districts)]
 else:
-    scope_df = available_df
+    scope_df = df
 venue_options = sorted(scope_df["Venue_Name_EN"].dropna().unique())
 selected_venues = st.sidebar.multiselect(
     "Step 2: Venue",
@@ -156,10 +159,9 @@ selected_venues = st.sidebar.multiselect(
     key="snipe_venue",
 )
 
-# Step 3: Date — based on district + venue filter
-if selected_venues:
-    scope_df = scope_df[scope_df["Venue_Name_EN"].isin(selected_venues)]
-date_options = sorted(scope_df["Available_Date"].dropna().unique())
+# Step 3: Date — all dates in dataset (pd.to_datetime then sorted)
+date_vals = pd.to_datetime(df["Available_Date"].dropna(), errors="coerce").dropna().unique()
+date_options = sorted([d.strftime("%Y-%m-%d") for d in date_vals])
 selected_dates = st.sidebar.multiselect(
     "Step 3: Date",
     options=date_options,
@@ -167,14 +169,11 @@ selected_dates = st.sidebar.multiselect(
     key="snipe_date",
 )
 
-# Step 4: Time — based on previous filters
-if selected_dates:
-    scope_df = scope_df[scope_df["Available_Date"].isin(selected_dates)]
-time_options = sorted(scope_df["Session_Start_Time"].dropna().unique())
+# Step 4: Time — static list of playing hours (user can target e.g. 15:00 even if no slot exists yet)
 selected_times = st.sidebar.multiselect(
-    "Step 4: Time (e.g. 19:00, 20:00)",
-    options=time_options,
-    default=time_options,
+    "Step 4: Time (e.g. 07:00–23:00)",
+    options=SNIPER_TIME_OPTIONS,
+    default=SNIPER_TIME_OPTIONS,
     key="snipe_time",
 )
 
@@ -199,7 +198,7 @@ components.html(html_notification_permission_button(), height=70)
 
 if "last_checked" not in st.session_state:
     st.session_state.last_checked = None
-st.session_state.last_checked = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+st.session_state.last_checked = datetime.now(HK_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 # --- Found logic & alerts (when Live Monitor ON and filtered table NOT empty) ---
 target_found = not filtered_df.empty
