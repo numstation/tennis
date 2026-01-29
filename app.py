@@ -218,10 +218,10 @@ if enable_live_monitor:
     st.caption(f"Last checked at **{st.session_state.last_checked}**")
 
 if filtered_df.empty:
-    st.info("No slots match your sniper settings. Widen filters or enable Live Monitor to re-check every 60s.")
+    st.info("No slots match your sniper settings. Widen filters or enable Live Monitor to re-check every 30 mins.")
     if enable_live_monitor:
-        st.warning("Next check in 60 seconds...")
-        time.sleep(60)
+        st.warning("Next check in 30 minutes...")
+        time.sleep(30 * 60)
         st.rerun()
 else:
     st.subheader(f"Found {len(filtered_df)} Available Slots!")
