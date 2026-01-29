@@ -10,8 +10,12 @@ import streamlit.components.v1 as components
 import requests
 import pandas as pd
 from datetime import datetime
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(page_title="HK Tennis Sniper", layout="wide")
+
+# Auto-refresh every 30 minutes so deployed app gets new data
+st_autorefresh(interval=30 * 60 * 1000, key="data_refresh")
 
 API_URL = "https://data.smartplay.lcsd.gov.hk/rest/cms/api/v1/publ/contents/open-data/tennis/file"
 NOTIFICATION_ICON = "https://img.icons8.com/emoji/48/000000/tennis-icon.png"
@@ -81,7 +85,7 @@ def js_show_notification(venue_name: str):
     """
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=1800)
 def fetch_data():
     """Fetch JSON from HK SmartPlay API."""
     try:
@@ -96,6 +100,7 @@ def fetch_data():
 
 
 st.title("🎾 Ultimate HK Tennis Court Sniper")
+st.caption(f"Last updated: **{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}**")
 
 # --- Refresh Data ---
 if st.button("🔄 Refresh Data"):
